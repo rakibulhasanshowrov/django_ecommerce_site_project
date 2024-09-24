@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'crispy_forms',
     'app_login',
     'app_shop',
+    'App_Order',
     'crispy_bootstrap4',
 ]
 
