@@ -1,11 +1,21 @@
 from django.shortcuts import render, HttpResponseRedirect, redirect
 from django.urls import reverse
 from django.contrib import messages
+import string
 #models and forms
 from App_Order.models import Order, Cart
 from App_Payment.forms import BillingAddress
 from App_Payment.forms import BillingForm
 from django.contrib.auth.decorators import login_required
+
+# for payment
+import requests
+# from sslcommerz_python.payment import SSLCSession
+from sslcommerz_client import SSLCommerzClient
+from decimal import Decimal
+from sslcommerz_lib import SSLCOMMERZ
+import socket
+from django.views.decorators.csrf import csrf_exempt
 
 # Create your views here.
 @login_required
@@ -28,7 +38,7 @@ def checkout(request):
     return render(request, 'App_Payment/checkout.html', context={"form":form, "order_items":order_items, "order_total":order_total, "saved_address":saved_address})
   
   
-  @login_required
+@login_required
 def payment(request):
     saved_address = BillingAddress.objects.get_or_create(user=request.user)
     saved_address = saved_address[0]
@@ -40,26 +50,67 @@ def payment(request):
         messages.info(request, f"Please complete profile details!")
         return redirect("App_Login:profile")
 
-    store_id = 'none5e026730bdf7f'
-    API_key = 'none5e026730bdf7f@ssl'
-    mypayment = SSLCSession(sslc_is_sandbox=True, sslc_store_id=store_id, sslc_store_pass=API_key)
+    store_id = 'rhsli66f44960b03a6'
+    API_key = 'rhsli66f44960b03a6@ssl'
+    mypayment=SSLCommerzClient(
+    store_id='rhsli66f44960b03a6',
+    store_passwd='rhsli66f44960b03a6@ssl',
+    sandbox=True,
+)
+    # mypayment = SSLCSession(sslc_is_sandbox=True, sslc_store_id=store_id, sslc_store_pass=API_key)
 
     status_url = request.build_absolute_uri(reverse("App_Payment:complete"))
     #print(status_url)
-    mypayment.set_urls(success_url=status_url, fail_url=status_url, cancel_url=status_url, ipn_url=status_url)
+    # mypayment.set_urls(success_url=status_url, fail_url=status_url, cancel_url=status_url, ipn_url=status_url)
 
     order_qs = Order.objects.filter(user=request.user, ordered=False)
-    order_items = order_qs[0].orderitems.all()
+    print(f'Order_qs Result:{order_qs}')
+    order_items_cart = order_qs[0].orderitems.all()
+    order_items=[]
+    for item in order_items_cart:
+        order_items.append(str(item))
+        print(f'Items are:{str(item)}')
+    print(f'Order_Items Result:{order_items}')
     order_items_count = order_qs[0].orderitems.count()
+    print(f'Order Item Count:{order_items_count}')
     order_total = order_qs[0].get_totals()
-
-    mypayment.set_product_integration(total_amount=Decimal(order_total), currency='BDT', product_category='Mixed', product_name=order_items, num_of_item=order_items_count, shipping_method='Courier', product_profile='None')
-
-
+    print(f'Order Total TK:{order_total}')
     current_user = request.user
-    mypayment.set_customer_info(name=current_user.profile.full_name, email=current_user.email, address1=current_user.profile.address_1, address2=current_user.profile.address_1, city=current_user.profile.city, postcode=current_user.profile.zipcode, country=current_user.profile.country, phone=current_user.profile.phone)
+    print(f'Current_user:{current_user}')
+    post_data = {
+    "total_amount": Decimal(order_total),
+    "currency": "BDT",
+    "tran_id": "221122",
+    "product_category": "Mixed",
+    "success_url": status_url,
+    "fail_url": status_url,
+    "cancel_url": status_url,
+    "cus_name": current_user.profile.full_name,
+    "cus_email": current_user.email,
+    "shipping_method": 'NO',
+    "num_of_item": order_items_count,
+    "product_name": order_items[0],
+    "product_category": 'Mixed',
+    "product_profile": "physical-goods",
+    "cus_add1": current_user.profile.address_1,
+    "cus_city": current_user.profile.city,
+    "cus_country": current_user.profile.country,
+    "cus_phone": current_user.profile.phone,
+}
+    
+    # mypayment.set_product_integration(total_amount=Decimal(order_total), currency='BDT', product_category='Mixed', product_name=order_items, num_of_item=order_items_count, shipping_method='Courier', product_profile='None')
 
-    mypayment.set_shipping_info(shipping_to=current_user.profile.full_name, address=saved_address.address, city=saved_address.city, postcode=saved_address.zipcode, country=saved_address.country)
 
-    response_data = mypayment.init_payment()
+    
+    # mypayment.set_customer_info(name=current_user.profile.full_name, email=current_user.email, address1=current_user.profile.address_1, address2=current_user.profile.address_1, city=current_user.profile.city, postcode=current_user.profile.zipcode, country=current_user.profile.country, phone=current_user.profile.phone)
+
+    # mypayment.set_shipping_info(shipping_to=current_user.profile.full_name, address=saved_address.address, city=saved_address.city, postcode=saved_address.zipcode, country=saved_address.country)
+
+    response_data = mypayment.initiate_session(post_data)
+    print(response_data)
     return redirect(response_data['GatewayPageURL'])
+
+
+@csrf_exempt
+def complete(request):
+    render(request,'App_Payment/complete.html',context={})
