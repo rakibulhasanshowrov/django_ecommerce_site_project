@@ -11,7 +11,7 @@ from django.contrib.auth.decorators import login_required
 # for payment
 import requests
 # from sslcommerz_python.payment import SSLCSession
-from sslcommerz_client import SSLCommerzClient
+from sslcommerz_lib import SSLCOMMERZ 
 from decimal import Decimal
 from sslcommerz_lib import SSLCOMMERZ
 import socket
@@ -52,24 +52,21 @@ def payment(request):
 
     store_id = 'rhsli66f44960b03a6'
     API_key = 'rhsli66f44960b03a6@ssl'
-    mypayment=SSLCommerzClient(
-    store_id='rhsli66f44960b03a6',
-    store_passwd='rhsli66f44960b03a6@ssl',
-    sandbox=True,
-)
-    # mypayment = SSLCSession(sslc_is_sandbox=True, sslc_store_id=store_id, sslc_store_pass=API_key)
+    settings={ 'store_id': 'rhsli66f44960b03a6', 'store_pass': 'rhsli66f44960b03a6@ssl', 'issandbox': True }
+    mypayment=SSLCOMMERZ(settings)
+    
 
     status_url = request.build_absolute_uri(reverse("App_Payment:complete"))
     #print(status_url)
-    # mypayment.set_urls(success_url=status_url, fail_url=status_url, cancel_url=status_url, ipn_url=status_url)
+    
 
     order_qs = Order.objects.filter(user=request.user, ordered=False)
     print(f'Order_qs Result:{order_qs}')
-    order_items_cart = order_qs[0].orderitems.all()
-    order_items=[]
-    for item in order_items_cart:
-        order_items.append(str(item))
-        print(f'Items are:{str(item)}')
+    order_items = order_qs[0].orderitems.all()
+    # order_items=[]
+    # for item in order_items_cart:
+    #     order_items.append(str(item))
+    #     print(f'Items are:{str(item)}')
     print(f'Order_Items Result:{order_items}')
     order_items_count = order_qs[0].orderitems.count()
     print(f'Order Item Count:{order_items_count}')
@@ -97,20 +94,22 @@ def payment(request):
     "cus_country": current_user.profile.country,
     "cus_phone": current_user.profile.phone,
 }
-    
-    # mypayment.set_product_integration(total_amount=Decimal(order_total), currency='BDT', product_category='Mixed', product_name=order_items, num_of_item=order_items_count, shipping_method='Courier', product_profile='None')
 
-
-    
-    # mypayment.set_customer_info(name=current_user.profile.full_name, email=current_user.email, address1=current_user.profile.address_1, address2=current_user.profile.address_1, city=current_user.profile.city, postcode=current_user.profile.zipcode, country=current_user.profile.country, phone=current_user.profile.phone)
-
-    # mypayment.set_shipping_info(shipping_to=current_user.profile.full_name, address=saved_address.address, city=saved_address.city, postcode=saved_address.zipcode, country=saved_address.country)
-
-    response_data = mypayment.initiate_session(post_data)
+    response_data = mypayment.createSession(post_data)
     print(response_data)
+    
     return redirect(response_data['GatewayPageURL'])
 
 
 @csrf_exempt
 def complete(request):
-    render(request,'App_Payment/complete.html',context={})
+    if request.method == 'POST' or request.method == 'post':
+        payment_data = request.POST
+        status = payment_data['status']
+        if status == 'VALID':
+            val_id = payment_data['val_id']
+            tran_id = payment_data['tran_id']
+            messages.success(request,f"Your Payment Completed Successfully! Page will be redirected!")
+        elif status == 'FAILED':
+            messages.warning(request, f"Your Payment Failed! Please Try Again! Page will be redirected!")
+    return render(request,'App_Payment/complete.html',context={})
